@@ -34,7 +34,7 @@ class LinearRamp:
             return self.end_value
         part = (i - self.start_iter) / (self.end_iter - self.start_iter)
         return self.start_value * (1 - part) + self.end_value * part
-    
+
 
 class DrawMethod(Enum):
     LINE = 'line'
@@ -42,7 +42,8 @@ class DrawMethod(Enum):
     SQUARE = 'square'
 
 
-def make_random_irregular_mask(shape, max_angle=4, max_len=60, max_width=20, min_len=10, min_width=5, min_times=0, max_times=10, draw_method=DrawMethod.LINE):
+def make_random_irregular_mask(shape, max_angle=4, max_len=60, max_width=20, min_len=10, min_width=5, min_times=0,
+                               max_times=10, draw_method=DrawMethod.LINE):
     draw_method = DrawMethod(draw_method)
 
     height, width = shape
@@ -71,7 +72,8 @@ def make_random_irregular_mask(shape, max_angle=4, max_len=60, max_width=20, min
 
 
 class RandomIrregularMaskEmbedder:
-    def __init__(self, max_angle=4, max_len=60, max_width=20, min_len=60, min_width=20, min_times=0, max_times=10, ramp_kwargs=None,
+    def __init__(self, max_angle=4, max_len=60, max_width=20, min_len=60, min_width=20, min_times=0, max_times=10,
+                 ramp_kwargs=None,
                  draw_method=DrawMethod.LINE):
         self.max_angle = max_angle
         self.max_len = max_len
@@ -88,25 +90,24 @@ class RandomIrregularMaskEmbedder:
         cur_max_len = int(max(1, self.max_len * coef))
         cur_max_width = int(max(1, self.max_width * coef))
         cur_max_times = int(self.min_times + 1 + (self.max_times - self.min_times) * coef)
-        return make_random_irregular_mask(img.shape[1:], max_angle=self.max_angle, 
-                                          max_len=cur_max_len, max_width=cur_max_width, 
+        return make_random_irregular_mask(img.shape[1:], max_angle=self.max_angle,
+                                          max_len=cur_max_len, max_width=cur_max_width,
                                           min_len=self.min_len, min_width=self.min_width,
                                           min_times=self.min_times, max_times=cur_max_times,
                                           draw_method=self.draw_method)
 
 
-
-def make_random_rectangle_mask(shape, margin=10, bbox_min_size=30, bbox_max_size=100, min_times=0, max_times=3, no_overlap=False):
+def make_random_rectangle_mask(shape, margin=10, bbox_min_size=30, bbox_max_size=100, min_times=0, max_times=3,
+                               no_overlap=False):
     height, width = shape
     union_mask = np.zeros((height, width), np.float32)
-    
-    
+
     bbox_max_size = min(bbox_max_size, height - margin * 2, width - margin * 2)
     times = np.random.randint(min_times, max_times + 1)
     individual_masks = np.zeros((times, 1, height, width), np.float32)  # Store each rectangle separately
 
     occupied = np.zeros((height, width), bool)  # To check overlap
-    
+
     for i in range(times):
         valid = False
         attempts = 0
@@ -115,14 +116,14 @@ def make_random_rectangle_mask(shape, margin=10, bbox_min_size=30, bbox_max_size
             box_height = np.random.randint(bbox_min_size, bbox_max_size + 1)
             start_x = np.random.randint(margin, width - margin - box_width + 1)
             start_y = np.random.randint(margin, height - margin - box_height + 1)
-            
+
             if no_overlap:
                 # Check if the selected area is free
                 if not np.any(occupied[start_y:start_y + box_height, start_x:start_x + box_width]):
                     valid = True
             else:
                 valid = True
-            
+
             if valid:
                 union_mask[start_y:start_y + box_height, start_x:start_x + box_width] = 1
                 individual_masks[i, 0, start_y:start_y + box_height, start_x:start_x + box_width] = 1
@@ -136,6 +137,7 @@ def make_random_rectangle_mask(shape, margin=10, bbox_min_size=30, bbox_max_size
     else:
         return union_mask[None, ...]
 
+
 class RandomRectangleMaskEmbedder:
     def __init__(self, margin=10, bbox_min_size=30, bbox_max_size=100, min_times=1, max_times=3, ramp_kwargs=None):
         self.margin = margin
@@ -145,7 +147,7 @@ class RandomRectangleMaskEmbedder:
         self.max_times = max_times
         self.ramp = LinearRamp(**ramp_kwargs) if ramp_kwargs is not None else None
 
-    def __call__(self, img, iter_i=None, raw_image=None, no_overlap=False, nb_times = None):
+    def __call__(self, img, iter_i=None, raw_image=None, no_overlap=False, nb_times=None):
         coef = self.ramp(iter_i) if (self.ramp is not None) and (iter_i is not None) else 1
         cur_bbox_max_size = int(self.bbox_min_size + 1 + (self.bbox_max_size - self.bbox_min_size) * coef)
         cur_max_times = int(self.min_times + (self.max_times - self.min_times) * coef)
@@ -160,13 +162,13 @@ class RandomRectangleMaskEmbedder:
                                           max_times=max_times, no_overlap=no_overlap)
 
 
-
 class CustomMaskEmbedder:
     """
     Used to control the size of the rectangles in the mask, between 10 and 100 %.
     """
+
     def __init__(self):
-        #nothing to init
+        # nothing to init
         pass
 
     def generate_rectangle_masks(self, num_masks=10, num_rectangles=1, image_size=256, min=0.1, max=1):
@@ -209,6 +211,7 @@ class CustomMaskEmbedder:
                     mask[start_idx_y:end_idx_y, start_idx_x:end_idx_x] = 1
             masks.append(mask)
         return masks
+
 
 def make_random_superres_mask(shape, min_step=2, max_step=4, min_width=1, max_width=3):
     height, width = shape
@@ -253,12 +256,12 @@ class DumbAreaMaskEmbedder:
             lower_limit = math.sqrt(self.min_ratio)
             upper_limit = math.sqrt(self.max_ratio)
             mask_side = round((np.random.random() * (upper_limit - lower_limit) + lower_limit) * dimension)
-            u = np.random.randint(0, dimension-mask_side-1)
-            v = u+mask_side 
+            u = np.random.randint(0, dimension - mask_side - 1)
+            v = u + mask_side
         else:
             margin = (math.sqrt(self.default_ratio) / 2) * dimension
-            u = round(dimension/2 - margin)
-            v = round(dimension/2 + margin)
+            u = round(dimension / 2 - margin)
+            v = round(dimension / 2 + margin)
         return u, v
 
     def __call__(self, img, iter_i=None, raw_image=None):
@@ -271,8 +274,9 @@ class DumbAreaMaskEmbedder:
 
 
 class OutpaintingMaskEmbedder:
-    def __init__(self, min_padding_percent:float=0.04, max_padding_percent:int=0.25, left_padding_prob:float=0.5, top_padding_prob:float=0.5, 
-                 right_padding_prob:float=0.5, bottom_padding_prob:float=0.5, is_fixed_randomness:bool=False):
+    def __init__(self, min_padding_percent: float = 0.04, max_padding_percent: int = 0.25,
+                 left_padding_prob: float = 0.5, top_padding_prob: float = 0.5,
+                 right_padding_prob: float = 0.5, bottom_padding_prob: float = 0.5, is_fixed_randomness: bool = False):
         """
         is_fixed_randomness - get identical paddings for the same image if args are the same
         """
@@ -283,27 +287,30 @@ class OutpaintingMaskEmbedder:
 
         assert self.min_padding_percent <= self.max_padding_percent
         assert self.max_padding_percent > 0
-        assert len([x for x in [self.min_padding_percent, self.max_padding_percent] if (x>=0 and x<=1)]) == 2, f"Padding percentage should be in [0,1]"
+        assert len([x for x in [self.min_padding_percent, self.max_padding_percent] if
+                    (x >= 0 and x <= 1)]) == 2, f"Padding percentage should be in [0,1]"
         assert sum(self.probs) > 0, f"At least one of the padding probs should be greater than 0 - {self.probs}"
-        assert len([x for x in self.probs if (x >= 0) and (x <= 1)]) == 4, f"At least one of padding probs is not in [0,1] - {self.probs}"
+        assert len([x for x in self.probs if
+                    (x >= 0) and (x <= 1)]) == 4, f"At least one of padding probs is not in [0,1] - {self.probs}"
         if len([x for x in self.probs if x > 0]) == 1:
-            print(f"Warning: Only one padding prob is greater than zero - {self.probs}. That means that the outpainting masks will be always on the same side")
+            print(
+                f"Warning: Only one padding prob is greater than zero - {self.probs}. That means that the outpainting masks will be always on the same side")
 
     def apply_padding(self, mask, coord):
-        mask[int(coord[0][0]*self.img_h):int(coord[1][0]*self.img_h),   
-             int(coord[0][1]*self.img_w):int(coord[1][1]*self.img_w)] = 1
+        mask[int(coord[0][0] * self.img_h):int(coord[1][0] * self.img_h),
+        int(coord[0][1] * self.img_w):int(coord[1][1] * self.img_w)] = 1
         return mask
 
     def get_padding(self, size):
-        n1 = int(self.min_padding_percent*size)
-        n2 = int(self.max_padding_percent*size)
+        n1 = int(self.min_padding_percent * size)
+        n2 = int(self.max_padding_percent * size)
         return self.rnd.randint(n1, n2) / size
 
     @staticmethod
     def _img2rs(img):
         arr = np.ascontiguousarray(img.astype(np.uint8))
         str_hash = hashlib.sha1(arr).hexdigest()
-        res = hash(str_hash)%(2**32)
+        res = hash(str_hash) % (2 ** 32)
         return res
 
     def __call__(self, img, iter_i=None, raw_image=None):
@@ -319,21 +326,21 @@ class OutpaintingMaskEmbedder:
             self.rnd = np.random
 
         coords = [[
-                   (0,0), 
-                   (1,self.get_padding(size=self.img_h))
-                  ],
-                  [
-                    (0,0),
-                    (self.get_padding(size=self.img_w),1)
-                  ],
-                  [
-                    (0,1-self.get_padding(size=self.img_h)),
-                    (1,1)
-                  ],    
-                  [
-                    (1-self.get_padding(size=self.img_w),0),
-                    (1,1)
-                  ]]
+            (0, 0),
+            (1, self.get_padding(size=self.img_h))
+        ],
+            [
+                (0, 0),
+                (self.get_padding(size=self.img_w), 1)
+            ],
+            [
+                (0, 1 - self.get_padding(size=self.img_h)),
+                (1, 1)
+            ],
+            [
+                (1 - self.get_padding(size=self.img_w), 0),
+                (1, 1)
+            ]]
 
         for pp, coord in zip(self.probs, coords):
             if self.rnd.random() < pp:
@@ -341,7 +348,7 @@ class OutpaintingMaskEmbedder:
                 mask = self.apply_padding(mask=mask, coord=coord)
 
         if not at_least_one_mask_applied:
-            idx = self.rnd.choice(range(len(coords)), p=np.array(self.probs)/sum(self.probs))
+            idx = self.rnd.choice(range(len(coords)), p=np.array(self.probs) / sum(self.probs))
             mask = self.apply_padding(mask=mask, coord=coords[idx])
         return mask[None, ...]
 
@@ -361,19 +368,18 @@ class CocoSegmentationMaskEmbedder:
     def __init__(self):
         ## Empty class
         pass
-        
 
 
 class MixedMaskEmbedder:
-    def __init__(self, irregular_proba=1/4, irregular_kwargs=None,
-                 box_proba=1/4, box_kwargs=None,
-                 full_proba=1/4, full_kwargs=None,
+    def __init__(self, irregular_proba=1 / 4, irregular_kwargs=None,
+                 box_proba=1 / 4, box_kwargs=None,
+                 full_proba=1 / 4, full_kwargs=None,
                  squares_proba=0, squares_kwargs=None,
                  superres_proba=0, superres_kwargs=None,
                  outpainting_proba=0, outpainting_kwargs=None,
-                 segm_proba=1/4, segm_kwargs=None,
+                 segm_proba=1 / 4, segm_kwargs=None,
                  invert_proba=0.5,
-                img_size=256,
+                 img_size=256,
                  **kwargs
                  ):
         self.probas = []
@@ -381,7 +387,8 @@ class MixedMaskEmbedder:
 
         self.probas.append(irregular_proba)
         if irregular_kwargs is None:
-            irregular_kwargs = {'max_angle': 4, 'max_len': 50, 'max_width': 20, 'min_len': 50, 'min_width': 20, 'min_times': 1, 'max_times': 5}
+            irregular_kwargs = {'max_angle': 4, 'max_len': 50, 'max_width': 20, 'min_len': 50, 'min_width': 20,
+                                'min_times': 1, 'max_times': 5}
         else:
             irregular_kwargs = dict(irregular_kwargs)
         irregular_kwargs['draw_method'] = DrawMethod.LINE
@@ -429,22 +436,22 @@ class MixedMaskEmbedder:
 
         self.probas = np.array(self.probas, dtype='float32')
         self.probas /= self.probas.sum()
-        
 
         self.invert_proba = invert_proba
 
-    def __call__(self, 
-        imgs, 
-        masks = None, 
-        iter_i = None, 
-        raw_image = None, 
-        verbose = False,
-        no_overlap = False,
-        nb_times = None
-    ) -> torch.Tensor:
+    def __call__(self,
+                 imgs,
+                 masks=None,
+                 iter_i=None,
+                 raw_image=None,
+                 verbose=False,
+                 no_overlap=False,
+                 nb_times=None
+                 ) -> torch.Tensor:
         kind = np.random.choice(len(self.probas), p=self.probas)
         gen = self.gens[kind]
-        kwargs = {"no_overlap": no_overlap, "nb_times":nb_times} if isinstance(gen, RandomRectangleMaskEmbedder) else {}
+        kwargs = {"no_overlap": no_overlap, "nb_times": nb_times} if isinstance(gen,
+                                                                                RandomRectangleMaskEmbedder) else {}
         if isinstance(gen, CocoSegmentationMaskEmbedder):
             result = masks
         else:
@@ -454,7 +461,7 @@ class MixedMaskEmbedder:
                 result = gen(imgs[0], iter_i=iter_i, raw_image=raw_image, **kwargs)
             result = np.repeat(result[np.newaxis, :], imgs.shape[0], axis=0)
             result = torch.from_numpy(result)
-        if self.invert_proba > 0 and (np.random.random() < self.invert_proba) and not result.shape[1]>1:
+        if self.invert_proba > 0 and (np.random.random() < self.invert_proba) and not result.shape[1] > 1:
             result = 1 - result
         if verbose:
             print(f"kind = {kind}, result = {result.mean().item()}")
@@ -469,7 +476,7 @@ class MixedMaskEmbedder:
         # Generate inverted masks
         inverted_rect_mask = 1 - rect_mask
         inverted_irregular_mask = 1 - irregular_mask
-        full_mask = 1-self.gens[2](img)
+        full_mask = 1 - self.gens[2](img)
         # Collect masks into a list
         masks = [full_mask, rect_mask, inverted_rect_mask, irregular_mask, inverted_irregular_mask]
         return torch.tensor(np.stack(masks))
@@ -480,13 +487,14 @@ class MixedMaskEmbedder:
         union, individuals = self.gens[1](img, no_overlap=True, nb_times=nb_times)
         return torch.tensor(union), torch.tensor(individuals)
 
-
     def sample_different_sizes(self, size, num_rectangles, num_masks, min, max):
         # Generate masks using the first generator (rectangular)
         generator = CustomMaskEmbedder()
-        masks = generator.generate_rectangle_masks(num_masks = num_masks, num_rectangles=num_rectangles, image_size=size, min=min, max=max)
+        masks = generator.generate_rectangle_masks(num_masks=num_masks, num_rectangles=num_rectangles, image_size=size,
+                                                   min=min, max=max)
         return torch.tensor(masks)
-    
+
+
 def get_mask_embedder(kind, **kwargs):
     if kind is None:
         kind = "mixed"
@@ -511,7 +519,7 @@ if __name__ == "__main__":
     # initialize
     np.random.seed(42)
     mask_embedder = MixedMaskEmbedder(segm_proba=0)
-    
+
     # generate and save 50 masks
     os.makedirs('output', exist_ok=True)
     dummy_img = np.zeros((1, 3, 256, 256))
@@ -539,4 +547,3 @@ if __name__ == "__main__":
     union = (union * 255).type(torch.uint8).numpy()
     union = Image.fromarray(union[0])
     union.save(f'output/mask_union.png')
-        

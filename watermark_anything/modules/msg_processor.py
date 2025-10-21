@@ -6,6 +6,7 @@
 
 import torch
 
+
 class MsgProcessor(torch.nn.Module):
     """
     Apply the secret message to the encoder output.
@@ -16,12 +17,13 @@ class MsgProcessor(torch.nn.Module):
             First part indicates Gaussian or binary.
             Second part indicates the operation to apply to the latents.
     """
+
     def __init__(
-        self, 
-        nbits: int, 
-        hidden_size: int,
-        msg_processor_type: str = "binary+concat",
-        msg_mult: float = 1.0,
+            self,
+            nbits: int,
+            hidden_size: int,
+            msg_processor_type: str = "binary+concat",
+            msg_mult: float = 1.0,
     ):
         super().__init__()
         self.nbits = nbits
@@ -41,7 +43,7 @@ class MsgProcessor(torch.nn.Module):
         else:
             raise ValueError(f"Invalid msg_processor_type: {self.msg_processor_type}")
 
-    def get_random_msg(self, bsz: int = 1, nb_repetitions = 1) -> torch.Tensor:
+    def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
         """
         Generate a random message
         Args:
@@ -53,7 +55,7 @@ class MsgProcessor(torch.nn.Module):
         if self.msg_type.startswith("bin"):
             if nb_repetitions != 1:
                 assert self.nbits % nb_repetitions == 0, f"nbits must be divisible by nb_repetitions, got {self.nbits} and {nb_repetitions}"
-                aux = torch.randint(0, 2, (bsz, self.nbits // nb_repetitions)) 
+                aux = torch.randint(0, 2, (bsz, self.nbits // nb_repetitions))
                 return aux.unsqueeze(1).repeat(1, nb_repetitions, 1).view(bsz, self.nbits)
             else:
                 return torch.randint(0, 2, (bsz, self.nbits))
@@ -64,10 +66,10 @@ class MsgProcessor(torch.nn.Module):
         return torch.tensor([])
 
     def forward(
-        self, 
-        latents: torch.Tensor, 
-        msg: torch.Tensor,
-        verbose: bool = False
+            self,
+            latents: torch.Tensor,
+            msg: torch.Tensor,
+            verbose: bool = False
     ) -> torch.Tensor:
         """
         Apply the message to the latents.
@@ -113,13 +115,13 @@ class MsgProcessor(torch.nn.Module):
             latents = torch.cat([
                 latents,  # b d' h/f w/f
                 self.msg_mult * msg_aux  # b d h/f w/f
-            ], dim=1)  # b d'+d h/f w/f
+            ], dim=1)  # b d' +d h/f w/f
         elif self.msg_agg == "add":
             latents = latents + self.msg_mult * msg_aux  # -> b d' h/f w/f
         else:
             raise ValueError(f"Invalid msg_agg: {self.msg_agg}")
-        
-        if verbose:    
+
+        if verbose:
             print(f'indices: {indices.shape}')
             print(f'msgs: {msg.shape}')
             print(f'msg_aux: {msg_aux.shape}')

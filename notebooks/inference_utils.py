@@ -29,8 +29,10 @@ from watermark_anything.modules.jnd import JND
 def msg2str(msg):
     return "".join([('1' if el else '0') for el in msg])
 
+
 def str2msg(str):
-    return [True if el=='1' else False for el in str]
+    return [True if el == '1' else False for el in str]
+
 
 def load_model_from_checkpoint(json_path, ckpt_path):
     """
@@ -45,7 +47,7 @@ def load_model_from_checkpoint(json_path, ckpt_path):
     # Create an argparse Namespace object from the parameters
     args = argparse.Namespace(**params)
     # print(args)
-    
+
     # Load configurations
     embedder_cfg = omegaconf.OmegaConf.load(args.embedder_config)
     embedder_params = embedder_cfg[args.embedder_model]
@@ -53,7 +55,7 @@ def load_model_from_checkpoint(json_path, ckpt_path):
     extractor_params = extractor_cfg[args.extractor_model]
     augmenter_cfg = omegaconf.OmegaConf.load(args.augmentation_config)
     attenuation_cfg = omegaconf.OmegaConf.load(args.attenuation_config)
-        
+
     # Build models
     embedder = build_embedder(args.embedder_model, embedder_params, args.nbits)
     extractor = build_extractor(extractor_cfg.model, extractor_params, args.img_size, args.nbits)
@@ -62,10 +64,10 @@ def load_model_from_checkpoint(json_path, ckpt_path):
         attenuation = JND(**attenuation_cfg[args.attenuation], preprocess=unnormalize_img, postprocess=normalize_img)
     except:
         attenuation = None
-    
+
     # Build the complete model
     wam = Wam(embedder, extractor, augmenter, attenuation, args.scaling_w, args.scaling_i)
-    
+
     # Load the model weights
     if os.path.exists(ckpt_path):
         checkpoint = torch.load(ckpt_path, map_location='cpu')
@@ -74,7 +76,7 @@ def load_model_from_checkpoint(json_path, ckpt_path):
         print(params)
     else:
         print("Checkpoint path does not exist:", ckpt_path)
-    
+
     return wam
 
 
@@ -124,7 +126,9 @@ def create_random_mask(img_pt, num_masks=1, mask_percentage=0.1, max_attempts=10
 
     return masks.to(img_pt.device)
 
-def multiwm_dbscan(preds: torch.Tensor, masks: torch.Tensor = None, gt_masks= None, threshold: float = 0.0, epsilon = 1, min_samples = 3000) -> torch.Tensor:
+
+def multiwm_dbscan(preds: torch.Tensor, masks: torch.Tensor = None, gt_masks=None, threshold: float = 0.0, epsilon=1,
+                   min_samples=3000) -> torch.Tensor:
     """
     Perform DBSCAN clustering on the predicted masks to identify clusters of pixels that are part of the same watermark.
 
@@ -138,12 +142,11 @@ def multiwm_dbscan(preds: torch.Tensor, masks: torch.Tensor = None, gt_masks= No
     """
     preds = preds > threshold  # B, K, H, W
 
-
-    union_mask = (masks.squeeze(1)>0.5).float() # B, H, W
+    union_mask = (masks.squeeze(1) > 0.5).float()  # B, H, W
 
     bit_accuracies = []
     H, W = union_mask[0].shape
-    K = preds.shape[1] # number of bits
+    K = preds.shape[1]  # number of bits
 
     nb_clusters_detected = 0
 
@@ -153,13 +156,13 @@ def multiwm_dbscan(preds: torch.Tensor, masks: torch.Tensor = None, gt_masks= No
 
     for i in range(preds.shape[0]):
         # select the corresponding mask union and predicition
-        mask = union_mask[i] # H, W
-        pred = preds[i] # K, H, W
-        
-        pred = pred.view(K, -1).t().cpu() # H*W, K
-        valid_indices = (mask.view(-1)>0).cpu() 
+        mask = union_mask[i]  # H, W
+        pred = preds[i]  # K, H, W
+
+        pred = pred.view(K, -1).t().cpu()  # H*W, K
+        valid_indices = (mask.view(-1) > 0).cpu()
         # print(f"proportion of pixels detected as wm: {valid_indices.sum().item()/(H*W)}")
-        valid_pred = pred[valid_indices].float() # shape [num_valid, K]
+        valid_pred = pred[valid_indices].float()  # shape [num_valid, K]
         if valid_pred.shape[0] == 0:
             print("no valid pixels detected")
             continue
@@ -188,17 +191,19 @@ def torch_to_np(img_tensor):
     img_tensor = img_tensor.squeeze().permute(1, 2, 0).cpu()
     return img_tensor.numpy()
 
+
 # Define a color map for each unique value for multiple wm viz
 color_map = {
-    -1: [0, 0, 0],       # Black for -1
-    0: [255, 0, 255], # ? for 0
-    1: [255, 0, 0],     # Red for 1
-    2: [0, 255, 0],     # Green for 2
-    3: [0, 0, 255],     # Blue for 3
-    4: [255, 255, 0],   # Yellow for 4
+    -1: [0, 0, 0],  # Black for -1
+    0: [255, 0, 255],  # ? for 0
+    1: [255, 0, 0],  # Red for 1
+    2: [0, 255, 0],  # Green for 2
+    3: [0, 0, 255],  # Blue for 3
+    4: [255, 255, 0],  # Yellow for 4
 }
 
-def plot_outputs(img, img_w, mask, mask_pred, labels = None, centroids = None):
+
+def plot_outputs(img, img_w, mask, mask_pred, labels=None, centroids=None):
     """
     Plot the original image, the watermarked image, the difference image, the ground truth mask, and the predicted mask.
     Args:
@@ -217,9 +222,8 @@ def plot_outputs(img, img_w, mask, mask_pred, labels = None, centroids = None):
     delta = np.clip(np.abs(10 * delta), 0, 1)
     img, img_w = torch_to_np(img), torch_to_np(img_w)
 
-    
     psnr = peak_signal_noise_ratio(img, img_w)
-    
+
     # plot images: original, watermarked, difference
     plt.figure(figsize=(18, 6))
     plt.subplot(1, 3, 1)
@@ -257,12 +261,13 @@ def plot_outputs(img, img_w, mask, mask_pred, labels = None, centroids = None):
             mask_ = full_labels_store == value
             for channel, color_value in enumerate(color):
                 rgb_image[channel][mask_.squeeze()] = color_value
-        rgb_image = resize_ori(rgb_image.float()/255)
+        rgb_image = resize_ori(rgb_image.float() / 255)
         rgb_image = rgb_image.permute(1, 2, 0).numpy()
         # Create a legend with sentences
         legend_labels = [f'{msg2str(centroids[key])}' for key in centroids.keys()]
-        legend_colors = [np.array(color_map[key])/255 for key in centroids.keys()]
-        handles = [plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=color, markersize=10) for color in legend_colors]
+        legend_colors = [np.array(color_map[key]) / 255 for key in centroids.keys()]
+        handles = [plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=color, markersize=10) for color in
+                   legend_colors]
         plt.legend(handles, legend_labels, loc='upper right', bbox_to_anchor=(1.15, 1))
         plt.imshow(rgb_image)
         plt.title('clusters')

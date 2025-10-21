@@ -15,16 +15,19 @@ from .perceptual import PerceptualLoss
 from ..modules.discriminator import NLayerDiscriminator
 from ..data.transforms import imnet_to_lpips
 
+
 def hinge_d_loss(logits_real, logits_fake):
     loss_real = torch.mean(F.relu(1. - logits_real))
     loss_fake = torch.mean(F.relu(1. + logits_fake))
     d_loss = 0.5 * (loss_real + loss_fake)
     return d_loss
 
+
 def adopt_weight(weight, global_step, threshold=0, value=0.):
     if global_step < threshold:
         weight = value
     return weight
+
 
 def weights_init(m):
     classname = m.__class__.__name__
@@ -36,12 +39,12 @@ def weights_init(m):
 
 
 class LPIPSWithDiscriminator(nn.Module):
-    def __init__(self, 
-        balanced = True, total_norm = 0.0, 
-        disc_weight = 1.0, percep_weight = 1.0, detect_weight = 1.0, decode_weight = 0.0,
-        disc_start = 0, disc_num_layers = 3, disc_in_channels = 3, disc_loss = "hinge", use_actnorm = False, 
-        percep_loss = "lpips"
-    ):
+    def __init__(self,
+                 balanced=True, total_norm=0.0,
+                 disc_weight=1.0, percep_weight=1.0, detect_weight=1.0, decode_weight=0.0,
+                 disc_start=0, disc_num_layers=3, disc_in_channels=3, disc_loss="hinge", use_actnorm=False,
+                 percep_loss="lpips"
+                 ):
         super().__init__()
         assert disc_loss in ["hinge", "vanilla"]
 
@@ -55,7 +58,8 @@ class LPIPSWithDiscriminator(nn.Module):
 
         self.perceptual_loss = PerceptualLoss(percep_loss=percep_loss)
 
-        self.discriminator = NLayerDiscriminator(input_nc=disc_in_channels,n_layers=disc_num_layers,use_actnorm=use_actnorm).apply(weights_init)
+        self.discriminator = NLayerDiscriminator(input_nc=disc_in_channels, n_layers=disc_num_layers,
+                                                 use_actnorm=use_actnorm).apply(weights_init)
         self.discriminator_iter_start = disc_start
         self.disc_loss = hinge_d_loss if disc_loss == "hinge" else nn.BCEWithLogitsLoss()
 
@@ -64,13 +68,13 @@ class LPIPSWithDiscriminator(nn.Module):
 
     @torch.no_grad()
     def calculate_adaptive_weights(
-        self, 
-        losses, 
-        weights, 
-        last_layer, 
-        total_norm=0, 
-        choose_norm_idx=2,
-        eps=1e-12
+            self,
+            losses,
+            weights,
+            last_layer,
+            total_norm=0,
+            choose_norm_idx=2,
+            eps=1e-12
     ) -> list:
         # calculate gradients for each loss
         grads = []
@@ -97,27 +101,28 @@ class LPIPSWithDiscriminator(nn.Module):
         scales = [r * total_norm / (eps + norm) for r, norm in zip(ratios, grad_norms)]
         return scales
 
-    def forward(self, 
-        inputs: torch.Tensor, reconstructions: torch.Tensor, 
-        masks: torch.Tensor, msgs: torch.Tensor, preds: torch.Tensor,
-        optimizer_idx: int, global_step: int, 
-        last_layer=None, cond=None, msgs2 = None
-    ):
-        
+    def forward(self,
+                inputs: torch.Tensor, reconstructions: torch.Tensor,
+                masks: torch.Tensor, msgs: torch.Tensor, preds: torch.Tensor,
+                optimizer_idx: int, global_step: int,
+                last_layer=None, cond=None, msgs2=None
+                ):
+
         if optimizer_idx == 0:  # embedder update
             weights = [self.percep_weight, self.disc_weight, self.detect_weight]
             losses = []
             # perceptual loss
             losses.append(self.perceptual_loss(
-                imgs = imnet_to_lpips(inputs.contiguous()),
-                imgs_w = imnet_to_lpips(reconstructions.contiguous()),
-            ).mean())  
+                imgs=imnet_to_lpips(inputs.contiguous()),
+                imgs_w=imnet_to_lpips(reconstructions.contiguous()),
+            ).mean())
             # discriminator loss
             logits_fake = self.discriminator(reconstructions.contiguous())
             disc_factor = adopt_weight(1.0, global_step, threshold=self.discriminator_iter_start)
-            losses.append( - logits_fake.mean())
+            losses.append(- logits_fake.mean())
             # detection loss
-            detection_loss = self.detection_loss(preds[:, 0:1, :, :].contiguous(), masks.max(1).values.unsqueeze(1).contiguous().float()).mean()
+            detection_loss = self.detection_loss(preds[:, 0:1, :, :].contiguous(),
+                                                 masks.max(1).values.unsqueeze(1).contiguous().float()).mean()
             losses.append(detection_loss)
             # decoding loss
             losses_decoding = []
@@ -131,8 +136,9 @@ class LPIPSWithDiscriminator(nn.Module):
                     msg_preds_ = msg_preds.masked_select(mask)
                     msg_targs = msg_targs.masked_select(mask)
                     # non empty mask
-                    if len(msg_preds_)>0:
-                        losses_decoding.append(self.decoding_loss(msg_preds_.contiguous(), msg_targs.contiguous().float())) 
+                    if len(msg_preds_) > 0:
+                        losses_decoding.append(
+                            self.decoding_loss(msg_preds_.contiguous(), msg_targs.contiguous().float()))
                 if len(losses_decoding) > 0:
                     combined_loss = torch.cat(losses_decoding, dim=0)
                     average_loss = combined_loss.mean()
@@ -141,10 +147,10 @@ class LPIPSWithDiscriminator(nn.Module):
             # calculate adaptive weights
             if last_layer is not None and self.balanced:
                 scales = self.calculate_adaptive_weights(
-                    losses = losses,
-                    weights = weights,
-                    last_layer = last_layer,
-                    total_norm = self.total_norm,
+                    losses=losses,
+                    weights=weights,
+                    last_layer=last_layer,
+                    total_norm=self.total_norm,
                 )
             else:
                 scales = weights
@@ -158,8 +164,8 @@ class LPIPSWithDiscriminator(nn.Module):
                 "disc_scale": scales[1],
                 "detect_loss": losses[2].clone().detach().mean(),
                 "detect_scale": scales[2],
-                "decode_loss": losses[3].clone().detach().mean() if len(losses) > 3 else -1,#0.0,
-                "decode_scale": scales[3] if len(losses) > 3 else -1,#0.0,
+                "decode_loss": losses[3].clone().detach().mean() if len(losses) > 3 else -1,  # 0.0,
+                "decode_scale": scales[3] if len(losses) > 3 else -1,  # 0.0,
             }
             return total_loss, log
 
@@ -180,7 +186,7 @@ class LPIPSWithDiscriminator(nn.Module):
                    "logits_fake": logits_fake.detach().mean()
                    }
             return d_loss, log
-    
+
     def to(self, device, *args, **kwargs):
         """
         Override for custom perceptual loss to device.

@@ -9,16 +9,18 @@ import torch.nn as nn
 from lpips import LPIPS
 
 from .ssim import SSIM, MSSSIM
-from .yuv import YUVLoss
+from .yuvloss import YUVLoss
+
 
 class NoneLoss(nn.Module):
     def forward(self, x, y):
         return torch.zeros(1, requires_grad=True)
 
+
 class PerceptualLoss(nn.Module):
     def __init__(
-        self, 
-        percep_loss: str
+            self,
+            percep_loss: str
     ):
         super(PerceptualLoss, self).__init__()
         self.losses = {
@@ -33,8 +35,8 @@ class PerceptualLoss(nn.Module):
         self.perceptual_loss = self.create_perceptual_loss(percep_loss)
 
     def create_perceptual_loss(
-        self, 
-        percep_loss: str
+            self,
+            percep_loss: str
     ):
         """
         Create a perceptual loss function from a string.
@@ -45,7 +47,7 @@ class PerceptualLoss(nn.Module):
         parts = percep_loss.split('+')
         if len(parts) == 1 and parts[0] in self.losses:
             return self.losses[parts[0]]
-        
+
         def combined_loss(x, y):
             total_loss = 0
             for part in parts:
@@ -59,13 +61,13 @@ class PerceptualLoss(nn.Module):
                 else:
                     raise ValueError(f"Loss type {loss_key} not supported.")
             return total_loss
-        
+
         return combined_loss
 
     def forward(
-        self, 
-        imgs: torch.Tensor,
-        imgs_w: torch.Tensor,
+            self,
+            imgs: torch.Tensor,
+            imgs_w: torch.Tensor,
     ) -> torch.Tensor:
         return self.perceptual_loss(imgs, imgs_w)
 
