@@ -1,0 +1,49 @@
+embedder:
+  name: vae
+  cfg:
+    encoder:
+      ch: 64
+      out_ch: 3
+      ch_mult: [1, 2, 2]
+      num_res_blocks: 2
+      attn_resolutions: []
+      dropout: 0.0
+      in_channels: 3
+      resolution: 256
+      z_channels: 4
+      double_z: False
+    decoder:
+      ch: 64
+      out_ch: 3
+      ch_mult: [1, 2, 2]
+      num_res_blocks: 2
+      attn_resolutions: []
+      dropout: 0.0
+      in_channels: 3
+      resolution: 256
+      z_channels: 4
+    msg_processor:
+      # these are initial values; the training script will update nbits -> encoded length
+      nbits: 0
+      hidden_size: 8
+      msg_processor_type: "binary+concat"
+extractor:
+  name: sam
+  cfg:
+    encoder:
+      # use a small ViT — tune if needed
+      depth: 12
+      embed_dim: 192
+      img_size: 256
+      mlp_ratio: 4
+      num_heads: 3
+      patch_size: 16
+      qkv_bias: True
+      use_rel_pos: True
+      global_attn_indexes: [2, 5, 8, 11]
+      window_size: 14
+      out_chans: 512
+    pixel_decoder:
+      embed_dim: 512
+augmenter: {}   # leave empty to use default/no augmenter (the script handles None)
+jnd: {}         # leave empty if you don't want attenuation
