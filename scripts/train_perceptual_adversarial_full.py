@@ -127,7 +127,8 @@ def compute_message_loss_from_raw(preds_enc_logits, masks, raw_msgs, ecc_decoder
             mask = masks
         else:
             # incompatible mask shape; fall back to full-image mean with a warning
-            print(f"Warning: masks shape {tuple(masks.shape)} not compatible with preds kenc={kenc}. Using full-image average.")
+            print(
+                f"Warning: masks shape {tuple(masks.shape)} not compatible with preds kenc={kenc}. Using full-image average.")
             mean_logits = preds_flat.mean(dim=2)
             mask = None
 
@@ -162,6 +163,8 @@ def compute_message_loss_from_raw(preds_enc_logits, masks, raw_msgs, ecc_decoder
 
     loss = nn.BCEWithLogitsLoss()(logits_raw, raw_msgs.float())
     return loss, logits_raw
+
+
 # def maybe_make_augmenter(cfg):
 #     if Augmenter is None:
 #         return None
@@ -319,14 +322,23 @@ def train(args):
     # opt_wam = torch.optim.AdamW(params_mod, lr=args.lr_wam, weight_decay=args.weight_decay)
     opt_wam = torch.optim.AdamW(list(wam.embedder.parameters()) + list(wam.detector.parameters()), lr=args.lr_wam,
                                 weight_decay=1e-2)
-    # Replace the unconditional opt_disc creation with this conditional block:
-    if hasattr(loss_module, 'discriminator') and getattr(loss_module, 'discriminator') is not None:
+    # optimizer for discriminator -----------------------------------------#
+    # # discriminator may be optional depending on disc_weight========================#
+    # if hasattr(loss_module, 'discriminator') and getattr(loss_module, 'discriminator') is not None:
+    #     opt_disc = torch.optim.AdamW(loss_module.discriminator.parameters(), lr=args.lr_disc,
+    #                                  weight_decay=args.weight_decay)
+    # else:
+    #     opt_disc = None
+    # opt_disc = torch.optim.AdamW(loss_module.discriminator.parameters(), lr=args.lr_disc,
+    #                              weight_decay=args.weight_decay)
+
+    if args.disc_weight > 0 and hasattr(loss_module, 'discriminator'):
         opt_disc = torch.optim.AdamW(loss_module.discriminator.parameters(), lr=args.lr_disc,
                                      weight_decay=args.weight_decay)
     else:
         opt_disc = None
-    opt_disc = torch.optim.AdamW(loss_module.discriminator.parameters(), lr=args.lr_disc,
-                                 weight_decay=args.weight_decay)
+
+    # optimizer for learned ECC decoder (if any)
     opt_decoder = None
     if learned_decoder is not None:
         opt_decoder = torch.optim.AdamW(learned_decoder.parameters(), lr=args.lr_wam, weight_decay=args.weight_decay)
@@ -354,6 +366,11 @@ def train(args):
                 attacked = imgs_w + attack_net(imgs_w)
                 attacked = attacked.clamp(0., 1.)
                 preds = wam.detect(attacked)['preds']  # logits: b x (1 + k_enc) x H x W or similar
+                # After preds = wam.detect(... ) and before using pred_enc_logits
+                assert preds.ndim == 4, f"preds has unexpected ndim {preds.ndim}"
+                expected_channels = 1 + (args.nbits * args.rep)
+                if preds.shape[1] != expected_channels:
+                    print(f"WARNING: preds channels {preds.shape[1]} != expected {expected_channels}")
                 # detector outputs first channel mask; encoded bits start at index 1
                 pred_enc_logits = preds[:, 1:, :, :] if preds.shape[1] > 1 else preds[:, :1, :, :]
                 msg_loss, _ = compute_message_loss_from_raw(pred_enc_logits, None, raw_msgs, learned_decoder, rep,
@@ -364,7 +381,12 @@ def train(args):
                 opt_attack.step()
 
             # Discriminator update
-            opt_disc.zero_grad()
+            # opt_disc.zero_grad()
+            if opt_disc is not None:
+                opt_disc.zero_grad()
+                d_loss, d_log = loss_module(...)
+                d_loss.backward()
+                opt_disc.step()
             # with torch.no_grad():
             #     wam_outputs = wam.embed(imgs, msgs=encoded_msgs)
             #     imgs_w = wam_outputs['imgs_w']
@@ -393,7 +415,20 @@ def train(args):
                 preds_attacked = wam.detect(attacked)['preds']
                 pred_enc_logits_attacked = preds_attacked[:, 1:, :, :] if preds_attacked.shape[
                                                                               1] > 1 else preds_attacked[:, :1, :, :]
-
+                # Compute and print BER per log interval
+                with torch.no_grad():
+                    b = raw_msgs.shape[0]
+                    kenc = pred_enc_logits_attacked.shape[1]
+                    preds_flat = pred_enc_logits_attacked.view(b, kenc, -1)
+                    mean_logits = preds_flat.mean(dim=2)  # B x k_enc
+                    # majority decode for rep grouping
+                    rep = args.rep
+                    k_raw = raw_msgs.shape[1]
+                    probs = torch.sigmoid(mean_logits).view(b, k_raw, rep)
+                    mean_probs = probs.mean(dim=2)  # B x k_raw
+                    pred_bits = (mean_probs >= 0.5).float()
+                    ber = float((pred_bits != raw_msgs).float().mean().item())
+                    print(f"DBG: BER_attacked={ber:.4f}")
                 msg_loss, logits_raw = compute_message_loss_from_raw(pred_enc_logits_attacked, None, raw_msgs,
                                                                      learned_decoder, rep,
                                                                      use_learned_decoder=args.use_learned_decoder)
@@ -406,6 +441,11 @@ def train(args):
 
                 total_loss = args.lambda_msg * msg_loss + total_percep_loss
                 total_loss.backward()
+                # visualise grad norms for embedder
+                embed_grads = [p.grad.detach().norm().item() for p in wam.embedder.parameters() if p.grad is not None]
+                print("DBG: embedder_grad_count", len(embed_grads), "max_grad",
+                      max(embed_grads) if embed_grads else 0.0,
+                      "mean_grad", (sum(embed_grads) / len(embed_grads)) if embed_grads else 0.0)
                 opt_wam.step()
                 if opt_decoder is not None:
                     opt_decoder.step()
